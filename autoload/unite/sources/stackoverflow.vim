@@ -15,8 +15,18 @@ function! unite#sources#stackoverflow#define()
     return has('ruby') ? s:source : {}
 endfunction
 
+function! s:type(args)
+    if empty(a:args)
+        return "intitle"
+    endif
+
+    return a:args[0] ==# "tags" ? "tags" : "intitle"
+endfunction
+
 function! s:source.hooks.on_init(args, context)
-    let a:context.stackoverflow__input = input("keywords? ")
+    let t = s:type(a:args)
+    let a:context.stackoverflow__type = t
+    let a:context.stackoverflow__input = input(t ==# 'tags' ? "tags(separate by ';'): " : 'query: ')
 endfunction
 
 function! s:source.gather_candidates(args, context)
@@ -32,16 +42,15 @@ ruby << EOF
     module API extend self
 
         def search(query, type)
-            api_get("/2.0/similar?order=desc&sort=votes&#{type}=#{URI::encode query}&site=stackoverflow&filter=!9Tk5iz1Gf")
+            api_get "/2.2/search?order=desc&sort=votes&#{type}=#{URI::encode query}&site=stackoverflow"
         end
 
         private
 
         def api_get(path)
-            url = "https://api.stackexchange.com" + path
-            u = URI.parse(url)
+            u = URI::parse("https://api.stackexchange.com" + path)
             Net::HTTP.start(u.host, u.port, :use_ssl => true) do |http|
-                response = http.get(u.request_uri)
+                response = http.get u.request_uri
                 return JSON(response.body)['items']
             end
         end
@@ -49,8 +58,10 @@ ruby << EOF
     end
     end
 
-    StackOverflow::API::search_title(VIM::evaluate('a:context.stackoverflow__input'), "intitle").each do |item|
-        VIM::evaluate "add(candidates, {'word' : \"#{item['title']}\", 'action__uri' : \"#{item['link']}\"})"
+    type = VIM::evaluate 'a:context.stackoverflow__type'
+
+    StackOverflow::API::search(VIM::evaluate('a:context.stackoverflow__input'), type).each do |item|
+        VIM::evaluate "add(candidates, {'word' : \"#{URI::decode item['title']}\", 'action__uri' : \"#{item['link']}\"})"
     end
 EOF
 
