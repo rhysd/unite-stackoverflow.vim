@@ -31,8 +31,6 @@ endfunction
 
 function! s:source.gather_candidates(args, context)
 
-    let candidates = []
-
 ruby << EOF
     require 'rubygems' if RUBY_VERSION < "1.9"
     require 'json'
@@ -60,9 +58,11 @@ ruby << EOF
 
     type = VIM::evaluate 'a:context.stackoverflow__type'
 
-    StackOverflow::API::search(VIM::evaluate('a:context.stackoverflow__input'), type).each do |item|
-        VIM::evaluate "add(candidates, {'word' : \"#{URI::decode item['title']}\", 'action__uri' : \"#{item['link']}\"})"
-    end
+    VIM::command(
+        StackOverflow::API::search(VIM::evaluate('a:context.stackoverflow__input'), type).inject('let candidates = [') do |acc, item|
+            acc + "{'word' : \"#{URI::decode item['title']}\", 'action__uri' : \"#{item['link']}\"},"
+        end + ']'
+    )
 EOF
 
     return candidates
